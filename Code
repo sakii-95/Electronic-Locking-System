@@ -1,0 +1,207 @@
+#include <usart.h>
+
+unsigned char ReadEEPROM(unsigned char address){
+char password;
+EEADR=address;//Set the memory address that will be read
+EECON1bits.EEPGD=0;//Set Flash Program or Data EEPROM Memory to 0 (Access data EEPROM memory)
+EECON1bits.CFGS=0;//Set Flash Program/Data EEPROM or Configuration to 0 (Access Flash program or data EEPROM memory)
+EECON1bits.RD=1; //Set read Control bit to 0
+password=EEDATA;//Data is read form the register
+return (password);
+   }
+unsigned char WriteEEPROM(unsigned char address, char password){
+EEADR=address;//Set the memory adress that will be read
+EEDATA=password;
+EECON1bits.EEPGD=0;//EEPROM memory is pointed
+EECON1bits.CFGS=0;//EEPROM access enable
+EECON1bits.WREN=1;//enable write
+INTCONbits.GIE=0; 
+EECON2=0x55;//Start the writing enabling sequence
+EECON2=0xAA;
+EECON1bits.WR=1;//Write cycle to the EEPROM is complete
+INTCONbits.GIE=1;//Global Interrupter enable
+ while (EECON1bits.WR == 1)
+ {   };//wait for write to complete
+EECON1bits.WREN=0;
+    }
+unsigned char user_choice(char CHOICE)
+    {
+putrsUSART("\r\nDo you want reset the password, type 1(YES) or else(NO)");
+		  while (!DataRdyUSART());
+		  putrsUSART("\r\nYou typed:");
+		  while(BusyUSART());
+		  CHOICE = getcUSART();
+		  putcUSART(CHOICE);
+		  return(CHOICE);
+}
+ void Store_Password()
+{
+    unsigned char address = 0;
+    unsigned char PW;
+    unsigned char password;
+      for(PW = 0; PW<3; PW++)//User set password
+	 {
+     	     while (!DataRdyUSART());
+	     password = getcUSART();  //get character from buffer into C
+	     while(BusyUSART());
+	     WriteEEPROM(address, password);
+	     address++;
+	     
+	     if(PW<3)
+		{
+		   putcUSART('*'); 
+}
+}
+}   
+unsigned char Unlock(unsigned char address)
+{
+unsigned char wrong = 0;
+unsigned char unlock;
+unsigned char UL;
+putrsUSART("\r\nYou typed:");
+for(UL = 0; UL<3; UL++)
+    {
+      while (!DataRdyUSART());
+      unlock = getcUSART();  //get character from buffer into C   
+      putcUSART('*'); 
+      if(unlock != ReadEEPROM(address))
+	 {
+	    wrong++;
+	   }
+      address++;      //increment address location
+    }
+    return (wrong);
+ }
+Main body
+#pragma config OSC = HS // set OSC mode to HS
+#pragma config WDT = OFF // set watchdog timer off
+#pragma config LVP = OFF // Low Voltage Programming Off
+#pragma config DEBUG = OFF // Compile without extra Debug 
+// Include Files
+#include <p18f4520.h>
+#include <delays.h>
+#include <usart.h>
+#include "EEPROM_REA_WRI.h"
+#define LED2 PORTDbits.RD5		//setting the led port
+#define LED3 PORTDbits.RD4
+#define LOCK PORTDbits.RD0
+
+unsigned char WT;
+unsigned char address = 0;
+char CHOICE;
+unsigned char wrong;			//creating a variable 
+unsigned char wrong_time;
+unsigned char clean;	
+unsigned char a=1;
+unsigned char b=1;			//setting the variable value
+unsigned char c=1;
+
+void main ()
+{
+   LATD = 0x00; //Initialise Port C
+   LED3 = 0;
+   wrong_time = 0;
+if(a=1)
+{
+   TRISD =0x00;
+      LOCK = 0;
+}
+a++;
+
+   TXSTAbits.SYNC = 0; // asynchronous mode
+// Set USART Parameters Baud rate 19.200 Baud 8 data bits 2 stop bits, no interrupts
+   OpenUSART(USART_TX_INT_OFF & USART_RX_INT_OFF & USART_ASYNCH_MODE & USART_EIGHT_BIT & USART_CONT_RX & USART_BRGH_HIGH,64);
+
+      if(ReadEEPROM(1)==0xFF)  
+      {
+do{ 
+	  putrsUSART("\rPlease input your 3 digit password  to access the system:  "); // send this prompt
+      LOCK = 0;
+	  Store_Password();
+	  putrsUSART("\rDo you want to lock the system, type 1(YES) or any button (NO) " );
+	       while (!DataRdyUSART());
+	       putrsUSART("\r\nYou typed:");
+	       while(BusyUSART());
+	       CHOICE = getcUSART();
+	       putcUSART(CHOICE);
+	      if(CHOICE == '1')
+	      {
+		  putrsUSART("\rYou chose to lock\r ");
+		  LOCK = 0;   
+		  CHOICE = 0;
+	       }	 
+
+	       else
+	       {  
+		  putrsUSART("\rYou chose to unlock\r ");
+		  while(BusyUSART());
+		  LED2 = 1;		//activate LED2
+		  LOCK = 1;
+		  Delay10KTCYx(200); 
+		  LED2 = 0;		//turn LED2 off
+		  CHOICE = user_choice(CHOICE);
+		  if(CHOICE != '1')
+		  {
+		     LOCK = 0;
+		     putrsUSART("\rProgram end");
+		     while(1);
+		   }
+		  } 
+ }while(CHOICE == '1');		  
+	 }
+putrsUSART("\rPlease entry the password to unlock: ");	
+
+       for(WT = 0; WT<3; WT++)
+      {
+	 wrong = Unlock(address);
+      if(wrong == 0)		//check if password was wrong
+      {
+	 putrsUSART("\rsystem unlock successful\r\r");
+	 LED2 = 1;
+	 Delay10KTCYx(200);
+	 LED2 = 0;
+	 LOCK = 1;   
+	 CHOICE = user_choice(CHOICE);//problem
+	 if(CHOICE =='1')
+	 {
+	       WriteEEPROM(1,0xFF);
+	    break;			//break out of loop
+	 }  
+	 else
+	 {
+	    LOCK = 0;
+	    	putrsUSART("\rProgram end");
+		 while(1){}
+	  }
+      }
+      else
+      {
+	 if(wrong_time<2)		//check for wrong password
+	 {
+	    putrsUSART("\rYour password is wrong, Please try again");
+	 }  
+	    LED3 = 1;
+	    Delay10KTCYx(200);
+	    LED3 = 0;
+	    wrong_time++;
+      }
+      
+      if(wrong_time == 3)		//check final attempt of password
+      {
+	 putrsUSART("\rUnlock failed");
+	 LOCK = 0; 
+	 for(b = 1; b<=3; b++)   
+	 {   
+	 LED3 = 1;
+	     Delay10KTCYx(120);
+	    LED3 = 0;
+	 }  
+	putrsUSART("\rPlease wait 5 secound");
+	 for(c=1;c<=5;c++)		//disable the system 
+	 {
+	    Delay10KTCYx(100);
+	    putrsUSART("\r*");
+	    }
+}
+}   
+}  
